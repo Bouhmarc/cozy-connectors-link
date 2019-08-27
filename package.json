@@ -1,0 +1,11 @@
+{
+  "name": "cozy-konnector-without-cozy",
+  "version": "1.0.0",
+  "description": "Utiliation des connecteurs cozy sans cozy",
+  "main": "index.js",
+  "scripts": {
+    "test": "test"
+  },
+  "author": "Marc POLYCARPE",
+  "license": "ISC"
+}
