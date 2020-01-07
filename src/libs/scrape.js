@@ -1,4 +1,4 @@
-const log = require('cozy-logger').namespace('scrape')
+const log = require('../libs/log')
 
 /**
  * Declarative scraping.

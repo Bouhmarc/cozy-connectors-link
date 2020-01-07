@@ -4,11 +4,11 @@
  *
  * @module signin
  */
-const errors = require('../libs/errors')
+const errors = require('./errors')
 const rerrors = require('request-promise/errors')
 const requestFactory = require('./request')
 const cheerio = require('cheerio')
-
+const log = require('./log')
 /**
  * Provides an handy method to log the user in,
  * on HTML form pages. On success, it resolves to a promise with a parsed body.
