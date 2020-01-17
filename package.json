@@ -1,13 +1,13 @@
 {
-  "name": "cozy-konnector-without-cozy",
-  "version": "1.0.0",
+  "name": "cozy-konnector-link",
+  "version": "1.0.1",
   "description": "Utiliation des connecteurs cozy sans cozy",
   "main": "index.js",
   "scripts": {
     "test": "test"
   },
   "author": "Marc POLYCARPE",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "bluebird-retry": "^0.11.0",
     "cheerio": "^1.0.0-rc.3",
@@ -16,5 +16,14 @@
     "request-debug": "^0.2.0",
     "request-promise": "^4.2.4",
     "shelljs": "^0.8.3"
-  }
+  },
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Bouhmarc/cozy-connectors-link.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Bouhmarc/cozy-connectors-link/issues"
+  },
+  "homepage": "https://github.com/Bouhmarc/cozy-connectors-link#readme"
 }
