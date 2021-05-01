@@ -1,9 +1,35 @@
 // BaseKonnectorà  refaire
 // https://github.com/konnectors/libs/blob/master/packages/cozy-konnector-libs/src/libs/BaseKonnector.js
+
 const saveBills = require('./saveBills')
 const saveFiles = require('./saveFiles')
 const saveIdentity = require('./saveIdentity')
 const log = require('./log')
+const fs = require('fs')
+const path = require('path')
+const { Secret } = require('./log')
+const manifest = require('./manifest')
+const signin = require('./signin')
+const get = require('lodash/get')
+const omit = require('lodash/omit')
+
+const sleep = require('util').promisify(global.setTimeout)
+const LOG_ERROR_MSG_LIMIT = 32 * 1024 - 1 // to avoid to cut the json long and make it unreadable by the stack
+const once = require('lodash/once')
+
+const errors = require('./error')
+
+const checkTOS = err => {
+  if (
+    err &&
+    err.reason &&
+    err.reason.length &&
+    err.reason[0] &&
+    err.reason[0].title === 'TOS Updated'
+  ) {
+    throw new Error('TOS_NOT_ACCEPTED')
+  }
+}
 
 /**
  * @class
@@ -43,7 +69,7 @@ class BaseKonnector {
   /**
    * Constructor
    *
-   * @param  {function} fetch    - Function to be run automatically after account data is fetched.
+   * @param  {Function} fetch    - Function to be run automatically after account data is fetched.
    * This function will be binded to the current connector.
    *
    * If not fetch function is given. The connector will have to handle itself it's own exection and
@@ -51,49 +77,66 @@ class BaseKonnector {
    */
   constructor(fetch) {
 
-    // Par défaut on crée un compte
-    this._account = {}
+    // Par défaut le traitement n'est pas terminé
+    this.Ended = false
 
     if (typeof fetch === 'function') {
       this.fetch = fetch.bind(this)
       return this.run()
     }
-  }
 
-  async run() {
-    try {
-      const cozyFields = JSON.parse(process.env.COZY_FIELDS || '{}')
+    this.deactivateAutoSuccessfulLogin = once(
+      this.deactivateAutoSuccessfulLogin
+    )
 
-      this.fields = await this.init(cozyFields)
-
-      const cozyParameters = JSON.parse(process.env.COZY_PARAMETERS || '{}')
-      const prom = this.fetch(this.fields, cozyParameters)
-      if (!prom || !prom.then) {
-        log(
-          'warn',
-          `A promise should be returned from the \`fetch\` function. Here ${prom} was returned`
-        )
-        throw new Error('`fetch` should return a Promise')
-      }
-
-      await this.end.bind(this)
-    } catch (err) {
-      await this.fail.bind(this)
-    }
+    errors.attachProcessEventHandlers()
   }
 
   /**
-   * Hook called when the connector is ended
+   * Entrypoint of the konnector
+   *
+   * - Initializes connector attributes
+   * - Awaits this.main
+   * - Ensures errors are handled via this.fail
+   * - Calls this.end when the main function succeeded
+   */
+  async run() {
+    try {
+      log('debug', 'Preparing konnector...')
+      await this.initAttributes()
+      log('debug', 'Running konnector main...')
+      await this.main(this.fields, this.parameters)
+      await this.end()
+    } catch (err) {
+      log('warn', 'Error from konnector')
+      await this.fail(err)
+    }
+    // Note qu'on a terminé
+    this.Ended = true
+  }
+
+  /**
+   * Main runs after konnector has been initialized.
+   * Errors thrown will be automatically handled.
+   *
+   * @returns {Promise} - The konnector is considered successful when it resolves
+   */
+  main() {
+    return this.fetch(this.fields, this.parameters)
+  }
+
+  /**
+   * Hook called when the connector has ended successfully
    */
   end() {
-    log('info', 'The connector has been run')
+    log('debug', 'The connector has been run')
   }
 
   /**
    * Hook called when the connector fails
    */
   fail(err) {
-    log('info', 'Error caught by BaseKonnector')
+    log('debug', 'Error caught by BaseKonnector')
 
     const error = err.message || err
 
@@ -101,26 +144,64 @@ class BaseKonnector {
   }
 
   async getAccount(accountId) {
-    return true
+    try {
+      var account = {}
+      var sDonneesCompte = ''
+      var sFichierCompte  = ''
+      if (fs.existsSync(sFichierCompte)) {
+        sDonneesCompte = fs.readFileSync(path.join(__dirname, 'account.json'),'utf8')
+      }
+
+      if (sDonneesCompte != '') {
+        account = JSON.parse(sDonneesCompte)  
+      } else {
+         account._id = 1
+      }
+      return account // await cozy.data.find('io.cozy.accounts', accountId)
+
+    } catch (err) {
+      checkTOS(err)
+      log('error', err.message)
+      log('error', `Account ${accountId} does not exist`)
+      throw new Error('CANNOT_FIND_ACCOUNT')
+    }
   }
 
   /**
-   * Initializes the current connector with data coming from the associated account
+   * Initializes konnector attributes that will be used during its lifetime
    *
-   * @return {Promise} with the fields as an object
+   * - this._account
+   * - this.fields
    */
-  async init(cozyFields) {
-    if (!cozyFields) {
-      cozyFields = JSON.parse(process.env.COZY_FIELDS || '{}')
-    }
+  async initAttributes() {
+    // Parse environment variables
+    const cozyFields = JSON.parse(process.env.COZY_FIELDS || '{}')
+    const cozyParameters = JSON.parse(process.env.COZY_PARAMETERS || '{}')
 
-    // folder ID will be stored in cozyFields.folder_to_save when first connection
-    if (!cozyFields.folder_to_save) {
-      log('warn', `No folder_to_save available in the trigger`)
+    this.parameters = cozyParameters
+
+    // Set account
+    const account = await this.getAccount(cozyFields.account)
+    if (!account || !account._id) {
+      log('warn', 'No account was retrieved from getAccount')
     }
-    // on stocke également le chemin du répertoire
-    cozyFields.fields.DataDirectory = cozyFields.folder_to_save
-    return cozyFields.fields
+    this.accountId = account._id
+    this._account = new Secret(account)
+
+    // Set folder
+    const folderPath = cozyFields.folder_to_save
+    
+    this.fields = Object.assign(
+      {},
+      account.auth,
+      account.oauth,
+      folderPath
+        ? {
+            folderPath
+          }
+        : {},
+        cozyFields.fields
+    )
   }
 
   /**
@@ -139,7 +220,7 @@ class BaseKonnector {
    *
    * @param  {object} data    - Attributes to be merged
    * @param  {object} options - { merge: true|false }
-   * @return {Promise}: resolved with the modified account
+   * @returns {Promise}: resolved with the modified account
    */
   saveAccountData(data, options) {
     options = options || {}
@@ -154,7 +235,7 @@ class BaseKonnector {
   /**
    * Get the data saved by saveAccountData
    *
-   * @return {object}
+   * @returns {object}
    */
   getAccountData() {
     return new Secret(this._account.data || {})
@@ -163,24 +244,66 @@ class BaseKonnector {
   /**
    * Update account attributes and cache the account
    */
-  async updateAccountAttributes(attributes) {
-    return true
+  updateAccountAttributes(attributes) {
+
+    var account = {}
+    Object.assign(account, this._account)
+    Object.assign(account, attributes.data)
+
+    let sFichierCompte = path.join(__dirname,'account.json')
+    
+    fs.writeFileSync(sFichierCompte, JSON.stringify(account), 'utf8')
+
+    this._account = new Secret(account)
+    return account
+  }
+
+  /**
+   * Sets the 2FA state, according to the type passed.
+   * Doing so resets the twoFACode field
+   *
+   * Typically you should not use that directly, prefer to use waitForTwoFaCode since
+   * the wait for user input will be handled for you. It is useful though for the "app"
+   * type where no user input (inside Cozy) is needed.
+   *
+   * @param {string}  options.type - Used by the front to show the right message (email/sms/app)
+   * @param {boolean} options.retry
+   */
+  async setTwoFAState({ type, retry = false } = {}) {
+    let state = retry ? 'TWOFA_NEEDED_RETRY' : 'TWOFA_NEEDED'
+    if (type === 'email') {
+      state += '.EMAIL'
+    } else if (type === 'sms') {
+      state += '.SMS'
+    } else if (type === 'app') {
+      state += '.APP'
+    }
+    log('debug', `Setting ${state} state into the current account`)
+    await this.updateAccountAttributes({ state, twoFACode: null })
+  }
+
+  /**
+   * Resets 2FA state when not needed anymore
+   */
+  async resetTwoFAState() {
+    await this.updateAccountAttributes({
+      state: null,
+      twoFACode: null
+    })
   }
 
   /**
    * Notices that 2FA code is needed and wait for the user to submit it.
    * It uses the account to do the communication with the user.
    *
-   * It
-   *
-   * @param {String} options.type (default: "email") - Type of the expected 2FA code. The message displayed
+   * @param {string} options.type (default: "email") - Type of the expected 2FA code. The message displayed
    *   to the user will depend on it. Possible values: email, sms
-   * @param {Number} options.timeout (default 3 minutes after now) - After this date, the stop will stop waiting and
+   * @param {number} options.timeout (default 3 minutes after now) - After this date, the stop will stop waiting and
    * and an error will be shown to the user (deprecated and alias of endTime)
-   * @param {Number} options.endTime (default 3 minutes after now) - After this timestamp, the home will stop waiting and
+   * @param {number} options.endTime (default 3 minutes after now) - After this timestamp, the home will stop waiting and
    * and an error will be shown to the user
-   * @param {Number} options.heartBeat (default: 5000) - How many milliseconds between each code check
-   * @param {Boolean} options.retry (default: false) - Is it a retry. If true, an error message will be
+   * @param {number} options.heartBeat (default: 5000) - How many milliseconds between each code check
+   * @param {boolean} options.retry (default: false) - Is it a retry. If true, an error message will be
    *   displayed to the user
    * @throws Will throw `USER_ACTION_NEEDED.TWOFA_EXPIRED` if the konnector job is not run manually (we assume that
    * not run manually means that we do not have a graphic interface to fill the required information)
@@ -194,7 +317,6 @@ class BaseKonnector {
    * const { BaseKonnector } = require('cozy-konnector-libs')
    *
    * module.exports = new BaseKonnector(start)
-   *
    * async function start() {
    *    // we detect the need of a 2FA code
    *    const code = this.waitForTwoFaCode({
@@ -229,26 +351,24 @@ class BaseKonnector {
       options.endTime = options.timeout
     }
     let account = {}
-    let state = options.retry ? 'TWOFA_NEEDED_RETRY' : 'TWOFA_NEEDED'
-    if (options.type === 'email') state += '.EMAIL'
-    if (options.type === 'sms') state += '.SMS'
-    log('info', `Setting ${state} state into the current account`)
-    await this.updateAccountAttributes({ state, twoFACode: null })
+
+    await this.setTwoFAState({
+      type: options.type,
+      retry: options.retry
+    })
 
     while (Date.now() < options.endTime && !account.twoFACode) {
       await sleep(options.heartBeat)
       account = await cozy.data.find('io.cozy.accounts', this.accountId)
-      log('info', `current accountState : ${account.state}`)
-      log('info', `current twoFACode : ${account.twoFACode}`)
+      log('debug', `current accountState : ${account.state}`)
+      log('debug', `current twoFACode : ${account.twoFACode}`)
     }
 
     if (account.twoFACode) {
-      await this.updateAccountAttributes({
-        state: null,
-        twoFACode: null
-      })
+      await this.resetTwoFAState()
       return account.twoFACode
     }
+
     throw new Error('USER_ACTION_NEEDED.TWOFA_EXPIRED')
   }
 
@@ -258,7 +378,7 @@ class BaseKonnector {
    * See `deactivateAutoSuccess`
    */
   async notifySuccessfulLogin() {
-    log('info', 'Notify Cozy-Home of successful login')
+    log('debug', 'Notify Cozy-Home of successful login')
     await this.updateAccountAttributes({
       state: 'LOGIN_SUCCESS'
     })
@@ -277,7 +397,7 @@ class BaseKonnector {
    * Does nothing if called more than once.
    */
   async deactivateAutoSuccessfulLogin() {
-    log('info', 'Deactivating auto success for Cozy-Home')
+    log('debug', 'Deactivating auto success for Cozy-Home')
     await this.updateAccountAttributes({ state: 'HANDLE_LOGIN_SUCCESS' })
   }
 
@@ -285,7 +405,7 @@ class BaseKonnector {
    * This is saveBills function from cozy-konnector-libs which automatically adds sourceAccount in
    * metadata of each entry
    *
-   * @return {Promise}
+   * @returns {Promise}
    */
   saveBills(entries, fields, options) {
     return saveBills(entries, fields, {
@@ -299,7 +419,7 @@ class BaseKonnector {
    * This is saveFiles function from cozy-konnector-libs which automatically adds sourceAccount and
    * sourceAccountIdentifier cozyMetadatas to files
    *
-   * @return {Promise}
+   * @returns {Promise}
    */
   saveFiles(entries, fields, options) {
     return saveFiles(entries, fields, {
@@ -313,21 +433,17 @@ class BaseKonnector {
    * This is updateOrCreate function from cozy-konnector-libs which automatically adds sourceAccount in
    * metadata of each entry
    *
-   * @return {Promise}
+   * @returns {Promise}
    */
   updateOrCreate(entries, doctype, matchingAttributes, options) {
-    return updateOrCreate(entries, doctype, matchingAttributes, {
-      sourceAccount: this.accountId,
-      sourceAccountIdentifier: get(options, 'fields.login'),
-      ...options
-    })
+    return true;
   }
 
   /**
    * This is saveIdentity function from cozy-konnector-libs which automatically adds sourceAccount in
    * metadata of each entry
    *
-   * @return {Promise}
+   * @returns {Promise}
    */
   saveIdentity(contact, accountIdentifier, options = {}) {
     return saveIdentity(contact, accountIdentifier, {
@@ -338,6 +454,21 @@ class BaseKonnector {
   }
 
   /**
+   * This is signin function from cozy-konnector-libs which automatically adds deactivateAutoSuccessfulLogin
+   * and notifySuccessfulLogin calls
+   *
+   * @returns {Promise}
+   */
+  async signin(options = {}) {
+    await this.deactivateAutoSuccessfulLogin()
+    const result = await signin(omit(options, 'notifySuccessfulLogin'))
+    if (options.notifySuccessfulLogin !== false) {
+      await this.notifySuccessfulLogin()
+    }
+    return result
+  }
+
+  /**
    * Send a special error code which is interpreted by the cozy stack to terminate the execution of the
    * connector now
    *
@@ -345,19 +476,6 @@ class BaseKonnector {
    */
   terminate(err) {
     log('critical', String(err).substr(0, LOG_ERROR_MSG_LIMIT))
-    captureExceptionAndDie(err)
-  }
-
-  checkTOS(err) {
-    if (
-      err &&
-      err.reason &&
-      err.reason.length &&
-      err.reason[0] &&
-      err.reason[0].title === 'TOS Updated'
-    ) {
-      throw new Error('TOS_NOT_ACCEPTED')
-    }
   }
 
   /**
@@ -373,6 +491,6 @@ class BaseKonnector {
   }
 }
 
-//wrapIfSentrySetUp(BaseKonnector.prototype, 'run')
+BaseKonnector.checkTOS = checkTOS
 
 module.exports = BaseKonnector
