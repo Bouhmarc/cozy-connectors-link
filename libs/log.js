@@ -2,7 +2,6 @@ const Secret = require('./Secret')
 
 
 function log(sNiveau, sMessage){
-    
     console.log(sNiveau + ' : ' + sMessage + '( ' + __filename +')');
 }
 

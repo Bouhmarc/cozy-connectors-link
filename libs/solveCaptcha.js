@@ -4,8 +4,8 @@
  *
  * @module solveCaptcha
  */
- const log = require('cozy-logger').namespace('solveCaptcha')
- const errors = require('../helpers/errors')
+ const log = require('./log')
+ const errors = require('./errors')
  const request = require('request-promise')
  const sleep = require('util').promisify(global.setTimeout)
  
@@ -14,7 +14,8 @@
  const s = 1000 * ms
  const m = 60 * s
  
- const DEFAULT_TIMEOUT = connectorStartTime + 3 * m // 3 minutes by default to let 1 min to the connector to fetch files
+ const DEFAULT_TIMEOUT = 60000 // 60s (les captchas normaux sont gratuits au dela de 60s)
+ const DEFAULT_RECAPCHA_TIMEOUT = 300000 // 300 s time out pour le recaptcha
  
  /**
   * Use every possible means to solve a captcha. At the moment, Anticaptcha web service is used if
@@ -58,6 +59,7 @@
    const secrets = JSON.parse(process.env.COZY_PARAMETERS || '{}').secret
  
    if (params.type === 'recaptcha') {
+    params.timeout = Math.max(params.timeout,DEFAULT_RECAPCHA_TIMEOUT)  
      checkMandatoryParams(params, ['websiteKey', 'websiteURL'])
      const { websiteKey, websiteURL } = params
      return solveWithAntiCaptcha(
@@ -143,6 +145,9 @@
      })
      if (task && task.taskId) {
        log('debug', `    Task id : ${task.taskId}`)
+       // calcule la date de fin
+       dhTimeOut = Date.now() + timeout
+
        while (!gRecaptchaResponse) {
          const resp = await request.post(`${antiCaptchaApiUrl}/getTaskResult`, {
            body: {
@@ -160,7 +165,7 @@
            return resp.solution[resultAttribute]
          } else {
            log('debug', `    ${Math.round((Date.now() - startTime) / 1000)}s...`)
-           if (Date.now() > timeout) {
+           if (Date.now() > dhTimeOut) {
              log('warn', `  Captcha resolution timeout`)
              throw new Error(errors.CAPTCHA_RESOLUTION_FAILED + '.TIMEOUT')
            }

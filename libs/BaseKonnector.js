@@ -227,9 +227,11 @@ class BaseKonnector {
     options.merge = options.merge === undefined ? true : options.merge
     const start = options.merge ? Object.assign({}, this.getAccountData()) : {}
     const newData = Object.assign({}, start, data)
-    return this.updateAccountAttributes({ data: newData }).then(
-      account => account.data
-    )
+    
+    this.updateAccountAttributes({ data: newData }) 
+    
+    return newData
+
   }
 
   /**
@@ -379,7 +381,7 @@ class BaseKonnector {
    */
   async notifySuccessfulLogin() {
     log('debug', 'Notify Cozy-Home of successful login')
-    await this.updateAccountAttributes({
+    this.updateAccountAttributes({
       state: 'LOGIN_SUCCESS'
     })
   }

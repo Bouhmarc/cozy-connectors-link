@@ -524,8 +524,9 @@ function logFileStream(fileStream) {
 }
 
 async function getFiles(folderPath) {
-  const dir = await cozy.files.statByPath(folderPath)
-  const files = await queryAll('io.cozy.files', { dir_id: dir._id })
+
+  const files = []
+
   return files
 }
 

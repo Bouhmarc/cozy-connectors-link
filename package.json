@@ -1,6 +1,6 @@
 {
   "name": "cozy-konnector-link",
-  "version": "1.0.2",
+  "version": "1.0.4",
   "description": "Utiliation des connecteurs cozy sans cozy",
   "main": "index.js",
   "scripts": {

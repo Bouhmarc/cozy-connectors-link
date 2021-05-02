@@ -5,6 +5,7 @@ module.exports = {
   saveFiles: require('./libs/savefiles'),
   saveBills: require('./libs/saveBills'),
   hydrateAndFilter: require('./libs/hydrateAndFilter'),
+  solveCaptcha: require('./libs/solveCaptcha'),
   //  updateOrCreate: require('./libs/updateOrCreate'),
   requestFactory: require('./libs/request'),
   signin: require('./libs/signin'),
