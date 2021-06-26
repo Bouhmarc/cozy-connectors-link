@@ -207,7 +207,13 @@ const saveEntry = async function (entry, options) {
     throw new Error('TIMEOUT')
   }
 
-  await mkdirp(path.join(options.folderPath, entry.subPath))
+  // Si on a un sous répertoire, on le prends
+  if (entry.subPath)
+  {
+    await mkdirp(path.join(options.folderPath, entry.subPath))
+  }else{
+    await mkdirp(options.folderPath)
+  }
 
   let file = path.join(options.folderPath, entry.subPath, getFileName(entry))
   let shouldReplace = false
