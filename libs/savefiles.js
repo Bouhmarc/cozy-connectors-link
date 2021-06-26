@@ -206,16 +206,18 @@ const saveEntry = async function (entry, options) {
     log('info', `${remainingTime}s timeout finished for ${options.folderPath}`)
     throw new Error('TIMEOUT')
   }
-
+  let file
   // Si on a un sous répertoire, on le prends
   if (entry.subPath)
   {
     await mkdirp(path.join(options.folderPath, entry.subPath))
+    file = path.join(options.folderPath, entry.subPath, getFileName(entry))
   }else{
     await mkdirp(options.folderPath)
+    file = path.join(options.folderPath, getFileName(entry))
   }
 
-  let file = path.join(options.folderPath, entry.subPath, getFileName(entry))
+  
   let shouldReplace = false
   if (file) {
     try {
@@ -359,7 +361,14 @@ async function createFile(entry, options, method, fileId) {
   const toCreate =
     entry.filestream || downloadEntry(entry, { ...options, simple: false })
 
-  finalPath = path.join(options.folderPath, entry.subPath, getFileName(entry))
+  if (entry.subPath){
+    finalPath = path.join(options.folderPath, entry.subPath, getFileName(entry))
+  }else{
+    finalPath = path.join(options.folderPath, getFileName(entry))
+  
+  }
+
+      
   if (toCreate.pipe) {
     let writeStream = fs.createWriteStream(finalPath)
     toCreate.pipe(writeStream)
