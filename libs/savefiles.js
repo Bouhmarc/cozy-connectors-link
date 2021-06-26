@@ -81,13 +81,13 @@ const saveFiles = async (entries, fields, options = {}) => {
   if (!entries || entries.length === 0) {
     log('warn', 'No file to download')
   }
- /* if (!options.sourceAccount) {
-    log('warn', 'There is no sourceAccount given to saveFiles')
-  }
-
-  if (!options.sourceAccountIdentifier) {
-    log('warn', 'There is no sourceAccountIdentifier given to saveFIles')
-  }*/
+  /* if (!options.sourceAccount) {
+     log('warn', 'There is no sourceAccount given to saveFiles')
+   }
+ 
+   if (!options.sourceAccountIdentifier) {
+     log('warn', 'There is no sourceAccountIdentifier given to saveFIles')
+   }*/
   if (typeof fields !== 'object') {
     log(
       'debug',
@@ -109,6 +109,7 @@ const saveFiles = async (entries, fields, options = {}) => {
     requestInstance: options.requestInstance,
     shouldReplaceFile: options.shouldReplaceFile,
     validateFile: options.validateFile || defaultValidateFile,
+    subPath: options.subPath,
     sourceAccountOptions: {
       sourceAccount: options.sourceAccount,
       sourceAccountIdentifier: options.sourceAccountIdentifier
@@ -126,7 +127,7 @@ const saveFiles = async (entries, fields, options = {}) => {
   // Crée le répertoire
   await mkdirp(saveOptions.folderPath)
   const canBeSaved = entry =>
-    entry.fileurl || entry.requestOptions || entry.filestream
+    entry.fetchFile || entry.fileurl || entry.requestOptions || entry.filestream
 
   let filesArray = undefined
   let savedFiles = 0
@@ -163,11 +164,9 @@ const saveFiles = async (entries, fields, options = {}) => {
           )
           if (fileFound) {
             await renameFile(fileFound, entry)
-            return
-          } else {
-            delete entry.shouldReplaceName
-            // And continue as normal
+            
           }
+          delete entry.shouldReplaceName
         }
 
         if (canBeSaved(entry)) {
@@ -187,8 +186,7 @@ const saveFiles = async (entries, fields, options = {}) => {
     } else {
       log(
         'warn',
-        `saveFile timeout: still ${entries.length - savedEntries.length} / ${
-          entries.length
+        `saveFile timeout: still ${entries.length - savedEntries.length} / ${entries.length
         } to download`
       )
     }
@@ -196,20 +194,22 @@ const saveFiles = async (entries, fields, options = {}) => {
 
   log(
     'info',
-    `saveFiles created ${savedFiles} files for ${
-      savedEntries ? savedEntries.length : 'n'
+    `saveFiles created ${savedFiles} files for ${savedEntries ? savedEntries.length : 'n'
     } entries`
   )
   return savedEntries
 }
 
-const saveEntry = async function(entry, options) {
+const saveEntry = async function (entry, options) {
   if (options.timeout && Date.now() > options.timeout) {
     const remainingTime = Math.floor((options.timeout - Date.now()) / 1000)
     log('info', `${remainingTime}s timeout finished for ${options.folderPath}`)
     throw new Error('TIMEOUT')
   }
-  let file = path.join(options.folderPath, getFileName(entry))
+
+  await mkdirp(path.join(options.folderPath, entry.subPath))
+
+  let file = path.join(options.folderPath, entry.subPath, getFileName(entry))
   let shouldReplace = false
   if (file) {
     try {
@@ -224,7 +224,7 @@ const saveEntry = async function(entry, options) {
 
   if (shouldReplace && file) {
     method = 'updateById'
-    log('info', `Will replace ` + path.basename(file) +`...`)
+    log('info', `Will replace ` + path.basename(file) + `...`)
   }
 
   try {
@@ -245,8 +245,7 @@ const saveEntry = async function(entry, options) {
         if (err.message === 'BAD_DOWNLOADED_FILE') {
           log(
             'warn',
-            `Could not download file after ${
-              options.retry
+            `Could not download file after ${options.retry
             } tries removing the file`
           )
         } else {
@@ -270,8 +269,7 @@ const saveEntry = async function(entry, options) {
     log(
       'warn',
       err.message,
-      `Error caught while trying to save the file ${
-        entry.fileurl ? entry.fileurl : entry.filename
+      `Error caught while trying to save the file ${entry.fileurl ? entry.fileurl : entry.filename
       }`
     )
   }
@@ -309,12 +307,12 @@ async function getFileFromMetaData(entry) {
 
 async function getFileFromPath(entry, options) {
   try {
-    
-    sCheminComplet = path.join(options.folderPath,getFileName(entry))
-    if (fs.existsSync(sCheminComplet)) 
-        return sCheminComplet
+
+    sCheminComplet = path.join(options.folderPath, getFileName(entry))
+    if (fs.existsSync(sCheminComplet))
+      return sCheminComplet
     else
-        return null
+      return null
     const result = await cozy.files.statByPath(getFilePath({ entry, options }))
     return result
   } catch (err) {
@@ -324,7 +322,7 @@ async function getFileFromPath(entry, options) {
 }
 
 async function createFile(entry, options, method, fileId) {
-  
+
   let createFileOptions = {
     name: getFileName(entry),
     dir: options.folderPath
@@ -354,25 +352,26 @@ async function createFile(entry, options, method, fileId) {
 
   const toCreate =
     entry.filestream || downloadEntry(entry, { ...options, simple: false })
-    
-    finalPath = path.join(options.folderPath,entry.filename)
-    if (toCreate.pipe) {
-      let writeStream = fs.createWriteStream(finalPath)
-      toCreate.pipe(writeStream)
 
-      toCreate.on('end', () => {
-        log('info', `File ${finalPath} created`)
-        //resolve(fileDoc)
-      })
-      writeStream.on('error', err => {
-        log('warn', `Error : ${err} while trying to write file`)
-        
-      })
-    } else {
-      // file is a string
-      fs.writeFileSync(finalPath, toCreate)
-      resolve(fileDoc)
-    } 
+  finalPath = path.join(options.folderPath, entry.subPath, getFileName(entry))
+  if (toCreate.pipe) {
+    let writeStream = fs.createWriteStream(finalPath)
+    toCreate.pipe(writeStream)
+
+    toCreate.on('end', () => {
+      log('info', `File ${finalPath} created`)
+      //resolve(fileDoc)
+    })
+    writeStream.on('error', err => {
+      log('warn', `Error : ${err} while trying to write file`)
+
+    })
+  } else {
+    // file is a string
+    fs.writeFileSync(finalPath, toCreate)
+    resolve(fileDoc)
+  }
+  fileDocument = finalPath
 
 
 
@@ -421,7 +420,7 @@ function downloadEntry(entry, options) {
   return filePromise
 }
 
-const shouldReplaceFile = async function(file, entry, options) {
+const shouldReplaceFile = async function (file, entry, options) {
   const isValid = !options.validateFile || (await options.validateFile(file))
   if (!isValid) {
     log(
@@ -457,9 +456,15 @@ const shouldReplaceFile = async function(file, entry, options) {
   return shouldReplaceFileFn(file, entry)
 }
 
-const removeFile = async function(file) {
-  await cozy.files.trashById(file._id)
-  await cozy.files.destroyById(file._id)
+const removeFile = async function (file) {
+  return fs.stat(file, (err, stat) => {
+    if (stat) {
+      fs.unlink(file, (err) => {
+        if (err) throw err;
+        log('info', 'path/file.txt was deleted');
+      })
+    }
+  })
 }
 
 module.exports = saveFiles
@@ -486,16 +491,15 @@ function sanitizeFileName(filename) {
 
 function checkFileSize(filepath) {
 
-  if (!fs.existsSync(filepath))
-  {
-    log('info',`Le fichier ${filepath} n\'existe pas`)
+  if (!fs.existsSync(filepath)) {
+    log('info', `Le fichier ${filepath} n\'existe pas`)
     return false
   }
-  
+
   let stats = fs.statSync(filepath);
   let size = stats.size;
   let name = path.basename(filepath)
-  
+
   if (size === 0 || size === '0') {
     log('warn', `${name} is empty`)
     log('warn', 'BAD_FILE_SIZE')
@@ -514,8 +518,7 @@ function logFileStream(fileStream) {
   if (fileStream && fileStream.constructor && fileStream.constructor.name) {
     log(
       'info',
-      `The fileStream attribute is an instance of ${
-        fileStream.constructor.name
+      `The fileStream attribute is an instance of ${fileStream.constructor.name
       }`
     )
   } else {
@@ -600,11 +603,11 @@ function getRequestInstance(entry, options) {
   return options.requestInstance
     ? options.requestInstance
     : requestFactory({
-        json: false,
-        cheerio: false,
-        userAgent: true,
-        jar: true
-      })
+      json: false,
+      cheerio: false,
+      userAgent: true,
+      jar: true
+    })
 }
 
 function getRequestOptions(entry, options) {
@@ -648,11 +651,11 @@ function getAttribute(obj, attribute) {
 /*const log = require('../libs/log')
 const fs = require('fs')
 const request = require('./request')
- 
+
 function saveFiles(documents, fields)
 {
     // documents : tableau d'objets contenant la liste des documents à récupérer
-    // Membres obligatoires : 
+    // Membres obligatoires :
     // fileurl, filename.
     // fields : les paramètres du connecteur (login, mot de passe, répertoire des données, ...)
     // Parcours tous les éléments
@@ -665,14 +668,14 @@ function saveFiles(documents, fields)
             sNomFichier = pclElement.filename;
         }else{
             sNomFichier = pclElement.vendor + '_' + pclElement.title
-            
+
         }
         var sCheminComplet = '';
-        // Pour chaque élément, on vérifie si le fichier existe déjà, 
+        // Pour chaque élément, on vérifie si le fichier existe déjà,
         // donc on construit le chemin complet
         sCheminComplet = fields.DataDirectory + sNomFichier;
 
-        // Télécharge le fichier 
+        // Télécharge le fichier
         TelechargeFichier(pclElement.fileurl, sCheminComplet);
 
 //        docs.push({
@@ -690,12 +693,12 @@ async function TelechargeFichier(sFileURL, sCheminComplet)
 {
     // Si le fichier existe, on le télécharge pas
 
-    if (fs.existsSync(sCheminComplet)) 
+    if (fs.existsSync(sCheminComplet))
     {
         log('Le fichier <' + sCheminComplet + '> existe déjà, on ne le télécharge pas' )
         return true;
     }
-    
+
     // Télécharge le fichier
     request(sFileURL).pipe(fs.createWriteStream(sCheminComplet))
 

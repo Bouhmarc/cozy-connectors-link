@@ -6,7 +6,7 @@ module.exports = {
   saveBills: require('./libs/saveBills'),
   hydrateAndFilter: require('./libs/hydrateAndFilter'),
   solveCaptcha: require('./libs/solveCaptcha'),
-  //  updateOrCreate: require('./libs/updateOrCreate'),
+  updateOrCreate: require('./libs/updateOrCreate'),
   requestFactory: require('./libs/request'),
   signin: require('./libs/signin'),
   submitForm: require('./libs/signin'),
@@ -16,5 +16,7 @@ module.exports = {
   addData: require('./libs/addData'),
   normalizeFilename: require('./libs/normalizeFilename'),
   mkdirp: require('./libs/mkdirp'),
-  CookieKonnector: require('./libs/CookieKonnector')
+  CookieKonnector: require('./libs/CookieKonnector'),
+  cozyClient: require('./libs/CozyClient'),
+  BankingReconciliator: require('./libs/BankingReconciliator')
 }

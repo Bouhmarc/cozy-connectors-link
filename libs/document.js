@@ -40,6 +40,18 @@ class Document {
   toJSON() {
     return this
   }
+  static registerClient(cozyClient)
+  {
+    /*if (!this.cozyClient) {
+      this.cozyClient = client
+    } else {
+      // eslint-disable-next-line no-console
+      console.warn(
+        'Document already has been registered, this is not possible to re-register as the client is shared globally between all classes. This is to prevent concurrency bugs.'
+      )
+      throw new Error('Document cannot be re-registered to a client.')
+    }*/
+  }
 
   /**
    * Compares to another document deeply.
