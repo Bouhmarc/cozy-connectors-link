@@ -2,7 +2,7 @@ const Secret = require('./Secret')
 
 
 function log(sNiveau, sMessage){
-    console.log(getColor(sNiveau),sMessage + '( ' + __filename +')');
+    console.log(getColor(sNiveau),sNiveau + ' - ' + sMessage + '( ' + __filename +')');
    
     if (sNiveau == 'critical'){
         var e = new Error()
