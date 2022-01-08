@@ -200,4 +200,4 @@ function getRequestOptions({ cheerio, userAgent, ...options }) {
 }
 
 const DEFAULT_USER_AGENT =
-'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:62.0) Gecko/20100101 Firefox/62.0'
+'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36'
