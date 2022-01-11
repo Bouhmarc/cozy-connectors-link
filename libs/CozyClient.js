@@ -17,7 +17,7 @@ class File {
     { 
         return true 
     }
-    updateAttributesById ()
+    updateAttributesById (sID, oAttributes)
     { 
         return true 
     }
@@ -30,19 +30,28 @@ class File {
             }
         }
     }
+    
+    trashById (sID)
+    { 
+        return true 
+    }
+    destroyById (sID)
+    {
+        return true;
+    }
+    batchDelete (sNameSpace, tabObjets)
+    {
+        return true;
+    }
+    /*statById (sID)
+    { 
+        return {}
+    }*/
+    statByPath (sPath)
+    { 
+        return {_id:0}
+    }
     /*
-    trashById ()
-    { 
-        return true 
-    }
-    statById ()
-    { 
-        return true 
-    }
-    statByPath ()
-    { 
-        return true 
-    }
     downloadById ()
     { 
         return true 

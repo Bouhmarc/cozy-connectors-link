@@ -475,8 +475,16 @@ const removeFile = async function (file) {
   return fs.stat(file, (err, stat) => {
     if (stat) {
       fs.unlink(file, (err) => {
-        if (err) throw err;
-        log('info', 'path/file.txt was deleted');
+        if (err){
+          // Cas particulier si l'erreur ets que le fichier n'existe pas
+          if (err.errno == -2)
+              return
+              
+          throw err;
+
+        }else{
+          log('info', 'path/file.txt was deleted');
+        }
       })
     }
   })

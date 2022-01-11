@@ -18,5 +18,6 @@ module.exports = {
   mkdirp: require('./libs/mkdirp'),
   CookieKonnector: require('./libs/CookieKonnector'),
   cozyClient: require('./libs/CozyClient'),
-  BankingReconciliator: require('./libs/BankingReconciliator')
+  BankingReconciliator: require('./libs/BankingReconciliator'),
+  utils: require('./libs/utils.js')
 }
