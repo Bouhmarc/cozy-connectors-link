@@ -2,5 +2,12 @@ function queryAll(sNameSpace, oObjet )
 {
     return []
 }
+function batchDelete (sNameSpace, tabObjets)
+{
+    return true;
+}
 
-module.exports = queryAll
+module.exports = {
+    queryAll,
+    batchDelete
+}

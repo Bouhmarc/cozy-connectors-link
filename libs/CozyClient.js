@@ -39,10 +39,7 @@ class File {
     {
         return true;
     }
-    batchDelete (sNameSpace, tabObjets)
-    {
-        return true;
-    }
+
     /*statById (sID)
     { 
         return {}

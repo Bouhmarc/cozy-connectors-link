@@ -359,7 +359,7 @@ async function createFile(entry, options, method, fileId) {
   }
 
   const toCreate =
-    entry.filestream || downloadEntry(entry, { ...options, simple: false })
+    entry.filestream || downloadEntry(entry, { ...options, simple: false})
 
   if (entry.subPath){
     finalPath = path.join(options.folderPath, entry.subPath, getFileName(entry))
@@ -368,47 +368,59 @@ async function createFile(entry, options, method, fileId) {
   
   }
 
-      
   if (toCreate.pipe) {
     let writeStream = fs.createWriteStream(finalPath)
     toCreate.pipe(writeStream)
 
-    toCreate.on('end', () => {
-      log('info', `File ${finalPath} created`)
-      //resolve(fileDoc)
-    })
-    writeStream.on('error', err => {
-      log('warn', `Error : ${err} while trying to write file`)
+    await waitForFileEnd(toCreate, finalPath, writeStream)
 
-    })
   } else {
     // file is a string
     fs.writeFileSync(finalPath, toCreate)
-    resolve(fileDoc)
+    // resolve(fileDoc)
+  
+    // Validate file if necessary
+    validateFile(finalPath, options)
+    
   }
-  fileDocument = finalPath
+  
+   // Validate file if necessary
+   validateFile(finalPath, options)
 
+  return finalPath
+}
+async function waitForFileEnd(file, finalPath, writeStream) {
+  await new Promise((resolve, reject) => {
+    file.on('end', () => {
+      log('debug', `File ${finalPath} created`)
+      resolve()
+    })
+    writeStream.on('error', err => {
+      log('warn', `Error : ${err} while trying to write file`)
+      reject(new Error(err))
+    })
+  })
+  await sleep(1) // allow the the file size to be correct (or else we get 0)
+}
 
-
-
+async function validateFile(sFilePath, options)
+{
+  // On valide le fichier
   if (options.validateFile) {
-    if ((await options.validateFile(fileDocument)) === false) {
-      await removeFile(fileDocument)
+    if ((await options.validateFile(sFilePath)) === false) {
+      await removeFile(sFilePath)
       throw new Error('BAD_DOWNLOADED_FILE')
     }
 
     if (
       options.validateFileContent &&
-      !(await options.validateFileContent(fileDocument))
+      !(await options.validateFileContent(sFilePath))
     ) {
-      await removeFile(fileDocument)
+      await removeFile(sFilePath)
       throw new Error('BAD_DOWNLOADED_FILE')
     }
   }
-
-  return fileDocument
 }
-
 function downloadEntry(entry, options) {
   let filePromise = getRequestInstance(entry, options)(
     getRequestOptions(entry, options)
